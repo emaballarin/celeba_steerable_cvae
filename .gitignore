@@ -204,3 +204,6 @@ fabric.properties
 
 # Local scratchpads
 scratches/
+
+# Datasets
+data/
