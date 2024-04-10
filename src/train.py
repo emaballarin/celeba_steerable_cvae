@@ -18,8 +18,7 @@ from tqdm.auto import trange
 
 DEVICE_AUTODETECT: bool = True
 IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
-TRAIN_BS: int = 1024
-TEST_BS: int = 32
+TRAIN_BS: int = 512
 LATENT_SIZE: int = 128
 CONDITION_SIZE: int = 40
 EPOCHS: int = 200
@@ -35,27 +34,14 @@ train_ds = CelebA(
     download=False,
 )
 
-test_ds = CelebA(
-    root="../data/",
-    split="test",
-    target_type="attr",
-    transform=Compose([Resize(IMG_SHAPE[1:]), ToTensor()]),
-    download=False,
-)
-
 train_dl = DataLoader(
     train_ds,
     batch_size=TRAIN_BS,
     shuffle=True,
     num_workers=16,
+    persistent_workers=True,
     pin_memory=(device == th.device("cuda")),
-)
-test_dl = DataLoader(
-    test_ds,
-    batch_size=TEST_BS,
-    shuffle=True,
-    num_workers=4,
-    pin_memory=(device == th.device("cuda")),
+    pin_memory_device="cuda" if (device == th.device("cuda")) else "",
 )
 
 model = CelebACVAE(lat_size=LATENT_SIZE, cond_size=CONDITION_SIZE).to(device)
@@ -64,15 +50,15 @@ optimizer = RAdam(model.parameters(), lr=BASE_LR)
 
 optimizer, scheduler = warmed_up_linneal(
     optim=optimizer,
-    init_lr=BASE_LR / 1e4,
+    init_lr=BASE_LR * 1e-4,
     steady_lr=BASE_LR,
-    final_lr=BASE_LR / 1e5,
+    final_lr=BASE_LR * 1e-6,
     warmup_epochs=5,
-    steady_epochs=145,
-    anneal_epochs=50,
+    steady_epochs=795,
+    anneal_epochs=200,
 )
 
-beta_epochs = min(EPOCHS // 3, 75)
+beta_epochs = EPOCHS // 5
 
 model.train()
 for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
@@ -90,4 +76,4 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
     scheduler.step()
 
 
-save_model(model, "./celeba_cvae.safetensors")
+save_model(model, "./celeba_cvae_v3.safetensors")
