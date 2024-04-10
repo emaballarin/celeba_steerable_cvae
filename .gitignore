@@ -207,3 +207,7 @@ scratches/
 
 # Datasets
 data/
+
+# Trained models
+models/
+*.safetensors

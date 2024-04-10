@@ -21,7 +21,7 @@ IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
 TRAIN_BS: int = 512
 LATENT_SIZE: int = 128
 CONDITION_SIZE: int = 40
-EPOCHS: int = 200
+EPOCHS: int = 1000
 BASE_LR: float = 1e-3
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
