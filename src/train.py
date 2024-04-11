@@ -23,10 +23,10 @@ TRAIN_BS: int = 256
 LATENT_SIZE: int = 128
 CONDITION_SIZE: int = 14
 EPOCHS: int = 200
-BASE_LR: float = 0.5e-3
-BETA_LAG: int = 4 + 11
-BETA_EPOCHS: int = max(0, EPOCHS // 4 - BETA_LAG)
-BETA_MAX: float = 1.0
+BASE_LR: float = 1e-3
+BETA_LAG: int = 5
+BETA_EPOCHS: int = max(0, EPOCHS // 10 - BETA_LAG)
+BETA_MAX: float = 6.0  # Target: RL/KL ~ 10
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
 
@@ -61,16 +61,16 @@ train_dl = DataLoader(
 
 model = CelebACVAE(lat_size=LATENT_SIZE, cond_size=CONDITION_SIZE).to(device)
 
-optimizer = RAdam(model.parameters(), lr=BASE_LR, betas=(0.9, 0.98))
+optimizer = RAdam(model.parameters(), lr=BASE_LR, betas=(0.9, 0.985))  # Dieleman, 2023
 
 optimizer, scheduler = warmed_up_linneal(
     optim=optimizer,
-    init_lr=BASE_LR * 1e-4,
-    steady_lr=BASE_LR,
-    final_lr=BASE_LR * 1e-2,
-    warmup_epochs=4,
-    steady_epochs=(EPOCHS - 4) // 2,
-    anneal_epochs=(EPOCHS - 4) // 2,
+    init_lr=BASE_LR * 1e-4,  # Empirical
+    steady_lr=BASE_LR,  # Standard practice
+    final_lr=BASE_LR * 1e-3,  # For ~long annealing
+    warmup_epochs=4,  # Minimum possible
+    steady_epochs=2 * (EPOCHS - 4) // 3,
+    anneal_epochs=(EPOCHS - 4) // 3,  # Quench a little
 )
 
 loss: th.Tensor = th.tensor(0.0, device=device)
@@ -80,7 +80,7 @@ kldiv: th.Tensor = th.tensor(0.0, device=device)
 wandb.init(
     project="celeba_sweeping_cvae",
     config={
-        "version": "v9",
+        "version": "v10",
     },
 )
 
@@ -127,4 +127,4 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
 wandb.finish()
 
 
-save_model(model, "./celeba_cvae_v9.safetensors")
+save_model(model, "./celeba_cvae_v10.safetensors")
