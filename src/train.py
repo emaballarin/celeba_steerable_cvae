@@ -3,6 +3,7 @@
 from typing import Tuple
 
 import torch as th
+import wandb
 from losses import beta_reco_bce
 from models import CelebACVAE
 from optim import RAdam
@@ -73,6 +74,15 @@ optimizer, scheduler = warmed_up_linneal(
     anneal_epochs=EPOCHS // 5,
 )
 
+loss: th.Tensor = th.tensor(0.0, device=device)
+
+wandb.init(
+    project="celeba_sweeping_cvae",
+    config={
+        "version": "v5",
+    },
+)
+
 model.train()
 for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
     beta: float = ((epoch / BETA_EPOCHS) if epoch < BETA_EPOCHS else 1.0) * BETA_MAX
@@ -87,6 +97,11 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
         loss.backward()
         optimizer.step()
     scheduler.step()
+    wandb.log(
+        {"loss": loss.item(), "beta": beta, "lr": optimizer.param_groups[0]["lr"]},
+        step=epoch,
+    )
+wandb.finish()
 
 
 save_model(model, "./celeba_cvae_v5.safetensors")
