@@ -22,10 +22,10 @@ IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
 TRAIN_BS: int = 256
 LATENT_SIZE: int = 128
 CONDITION_SIZE: int = 40
-EPOCHS: int = 60
+EPOCHS: int = 200
 BASE_LR: float = 0.5e-3
-BETA_EPOCHS: int = 0
-BETA_MAX: float = 0.7
+BETA_EPOCHS: int = EPOCHS // 4
+BETA_MAX: float = 1.0
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
 
@@ -58,20 +58,18 @@ train_dl = DataLoader(
     **dl_opt_kwargs,
 )
 
-model = CelebACVAE(lat_size=LATENT_SIZE, cond_size=CONDITION_SIZE, shared_neck=True).to(
-    device
-)
+model = CelebACVAE(lat_size=LATENT_SIZE, cond_size=CONDITION_SIZE).to(device)
 
-optimizer = RAdam(model.parameters(), lr=BASE_LR, betas=(0.9, 0.985))
+optimizer = RAdam(model.parameters(), lr=BASE_LR, betas=(0.9, 0.98))
 
 optimizer, scheduler = warmed_up_linneal(
     optim=optimizer,
     init_lr=BASE_LR * 1e-4,
     steady_lr=BASE_LR,
-    final_lr=BASE_LR * 1e-4,
+    final_lr=BASE_LR * 1e-2,
     warmup_epochs=4,
-    steady_epochs=EPOCHS - 4 - 4,
-    anneal_epochs=4,
+    steady_epochs=(EPOCHS - 4) // 2,
+    anneal_epochs=(EPOCHS - 4) // 2,
 )
 
 loss: th.Tensor = th.tensor(0.0, device=device)
@@ -81,7 +79,7 @@ kldiv: th.Tensor = th.tensor(0.0, device=device)
 wandb.init(
     project="celeba_sweeping_cvae",
     config={
-        "version": "v7",
+        "version": "v8",
     },
 )
 
@@ -105,10 +103,16 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
         optimizer.step()
     scheduler.step()
     wandb.log(
-        {"lossT": loss.item(), "lossR": reco.item(), "lossK": kldiv.item()},
+        {
+            "lossT": loss.item(),
+            "lossR": reco.item(),
+            "lossK": kldiv.item(),
+            "beta": beta,
+            "lr": scheduler.get_last_lr()[0],
+        },
         step=epoch,
     )
 wandb.finish()
 
 
-save_model(model, "./celeba_cvae_v7.safetensors")
+save_model(model, "./celeba_cvae_v8.safetensors")
