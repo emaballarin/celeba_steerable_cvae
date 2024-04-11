@@ -110,7 +110,7 @@ def make_decoder_base(lat_size: int = 128, cond_size: int = 40) -> nn.Module:
 
 class CelebACVAE(nn.Module):
     def __init__(
-        self, lat_size: int = 128, cond_size: int = 40, shared_neck: bool = False
+        self, lat_size: int = 128, cond_size: int = 14, shared_neck: bool = False
     ):
         super().__init__()
         self.lat_size: int = lat_size
