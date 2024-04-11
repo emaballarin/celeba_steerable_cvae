@@ -22,27 +22,24 @@ class Concatenate(nn.Module):
 
 
 class DuplexLinearNeck(nn.Module):
-    def __init__(self, in_dim: int, latent_dim: int):
+    def __init__(self, in_dim: int, latent_dim: int, shared: bool = False):
         super().__init__()
-        self.x_to_mu: nn.Linear = nn.Linear(in_dim, latent_dim)
-        self.x_to_log_var: nn.Linear = nn.Linear(in_dim, latent_dim)
+        self.shared: bool = shared
+        if shared:
+            self.shared_layer: nn.Linear = nn.Linear(in_dim, 2 * latent_dim)
+        else:
+            self.x_to_mu: nn.Linear = nn.Linear(in_dim, latent_dim)
+            self.x_to_log_var: nn.Linear = nn.Linear(in_dim, latent_dim)
 
     def forward(
         self, xc: Union[Tuple[th.Tensor, ...], List[th.Tensor]]
     ) -> Tuple[th.Tensor, th.Tensor]:
         cxc: th.Tensor = th.cat(xc, dim=1)
+
+        if self.shared:
+            # noinspection PyTypeChecker
+            return th.chunk(self.shared_layer(cxc), 2, dim=1)
         return self.x_to_mu(cxc), self.x_to_log_var(cxc)
-
-
-class GaussianNoise(nn.Module):
-    def __init__(self, std=1):
-        super().__init__()
-        self.std = std
-
-    def forward(self, x):
-        if self.train:
-            return x + th.randn_like(x) * self.std
-        return x
 
 
 class GaussianReparameterizerSampler(nn.Module):
@@ -56,44 +53,41 @@ class GaussianReparameterizerSampler(nn.Module):
 
 def make_encoder_base() -> nn.Module:
     return nn.Sequential(
-        GaussianNoise(1),
-        nn.Conv2d(3, 16, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(16, affine=True),
-        nn.LeakyReLU(0.1),
-        nn.Conv2d(16, 32, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(32, affine=True),
-        nn.LeakyReLU(0.1),
-        nn.Conv2d(32, 64, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(64, affine=True),
-        nn.LeakyReLU(0.1),
-        nn.Conv2d(64, 128, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(128, affine=True),
-        nn.LeakyReLU(0.1),
+        # 3x64x64
+        nn.Conv2d(3, 32, 3, stride=2, padding=1),
+        nn.BatchNorm2d(32),
+        nn.LeakyReLU(0.2),
+        nn.Conv2d(32, 64, 3, stride=2, padding=1),
+        nn.BatchNorm2d(64),
+        nn.LeakyReLU(0.2),
+        nn.Conv2d(64, 128, 3, stride=2, padding=1),
+        nn.BatchNorm2d(128),
+        nn.LeakyReLU(0.2),
+        nn.Conv2d(128, 256, 3, stride=2, padding=1),
+        nn.BatchNorm2d(256),
+        nn.LeakyReLU(0.2),
+        # 256x4x4
     )
 
 
-def make_decoder_base(lat_size: int = 100, cond_size: int = 40) -> nn.Module:
+def make_decoder_base(lat_size: int = 128, cond_size: int = 40) -> nn.Module:
     return nn.Sequential(
-        nn.Linear(lat_size + cond_size, 128 * 4 * 4),
-        nn.ReLU(),
-        nn.Unflatten(1, (128, 4, 4)),
-        nn.ConvTranspose2d(128, 128, 5, stride=1, padding=2, bias=False),
-        nn.BatchNorm2d(128, affine=True),
-        nn.LeakyReLU(0.1),
-        nn.Upsample(scale_factor=2),
-        nn.ConvTranspose2d(128, 64, 5, stride=1, padding=2, bias=False),
-        nn.BatchNorm2d(64, affine=True),
-        nn.LeakyReLU(0.1),
-        nn.Upsample(scale_factor=2),
-        nn.ConvTranspose2d(64, 32, 5, stride=1, padding=2, bias=False),
-        nn.BatchNorm2d(32, affine=True),
-        nn.LeakyReLU(0.1),
-        nn.Upsample(scale_factor=2),
-        nn.ConvTranspose2d(32, 16, 5, stride=1, padding=2, bias=False),
-        nn.BatchNorm2d(16, affine=True),
-        nn.LeakyReLU(0.1),
-        nn.Upsample(scale_factor=2),
-        nn.ConvTranspose2d(16, 3, 3, stride=1, padding=1, bias=True),
+        nn.Linear(lat_size + cond_size, 256 * 4 * 4),
+        nn.LeakyReLU(0.2),
+        nn.Unflatten(1, (256, 4, 4)),
+        nn.ConvTranspose2d(256, 256, 3, stride=2, padding=1, output_padding=1),
+        nn.BatchNorm2d(256),
+        nn.LeakyReLU(0.2),
+        nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, output_padding=1),
+        nn.BatchNorm2d(128),
+        nn.LeakyReLU(0.2),
+        nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
+        nn.BatchNorm2d(64),
+        nn.LeakyReLU(0.2),
+        nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
+        nn.BatchNorm2d(32),
+        nn.LeakyReLU(0.2),
+        nn.ConvTranspose2d(32, 3, 3, stride=1, padding=1),
         nn.Sigmoid(),
     )
 
@@ -102,18 +96,22 @@ def make_decoder_base(lat_size: int = 100, cond_size: int = 40) -> nn.Module:
 
 
 class CelebACVAE(nn.Module):
-    def __init__(self, lat_size: int = 100, cond_size: int = 40):
+    def __init__(
+        self, lat_size: int = 128, cond_size: int = 40, shared_neck: bool = False
+    ):
         super().__init__()
         self.lat_size: int = lat_size
         self.cond_size: int = cond_size
         self.encoder: nn.Module = make_encoder_base()
-        self.neck: nn.Module = DuplexLinearNeck(2048 + self.cond_size, self.lat_size)
+        self.neck: nn.Module = DuplexLinearNeck(
+            4096 + self.cond_size, self.lat_size, shared=shared_neck
+        )
         self.sampler: nn.Module = GaussianReparameterizerSampler()
         self.decoder: nn.Module = nn.Sequential(
             Concatenate(), make_decoder_base(self.lat_size, self.cond_size)
         )
 
-    def forward_train(
+    def forward(
         self, x: th.Tensor, c: th.Tensor
     ) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         compressed = self.encoder(x)
@@ -122,23 +120,15 @@ class CelebACVAE(nn.Module):
         reconstructed = self.decoder((sampled, c))
         return reconstructed, latent_mu, latent_logvar
 
-    def forward_eval(self, z: Optional[th.Tensor], c: th.Tensor) -> th.Tensor:
+    def sample_eval(self, z: Optional[th.Tensor], c: th.Tensor) -> th.Tensor:
         with th.no_grad():
             return (
                 self.decoder((z, c))
                 if z is not None
-                else self.decoder((th.randn((1, self.lat_size), device=self.device), c))
+                else self.decoder(
+                    (th.randn((c.shape[0], self.lat_size), device=self.device), c)
+                )
             )
-
-    def forward(
-        self,
-        x: Optional[th.Tensor] = None,
-        c: Optional[th.Tensor] = None,
-        z: Optional[th.Tensor] = None,
-    ) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor, th.Tensor]]:
-        if self.training:
-            return self.forward_train(x, c)
-        return self.forward_eval(z, c)
 
     @property
     def device(self) -> th.device:

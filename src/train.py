@@ -21,8 +21,10 @@ IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
 TRAIN_BS: int = 512
 LATENT_SIZE: int = 128
 CONDITION_SIZE: int = 40
-EPOCHS: int = 1000
+EPOCHS: int = 200
 BASE_LR: float = 1e-3
+BETA_EPOCHS: int = EPOCHS // 5
+BETA_MAX: float = 1.0
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
 
@@ -44,7 +46,9 @@ train_dl = DataLoader(
     pin_memory_device="cuda" if (device == th.device("cuda")) else "",
 )
 
-model = CelebACVAE(lat_size=LATENT_SIZE, cond_size=CONDITION_SIZE).to(device)
+model = CelebACVAE(lat_size=LATENT_SIZE, cond_size=CONDITION_SIZE, shared_neck=True).to(
+    device
+)
 
 optimizer = RAdam(model.parameters(), lr=BASE_LR)
 
@@ -53,16 +57,14 @@ optimizer, scheduler = warmed_up_linneal(
     init_lr=BASE_LR * 1e-4,
     steady_lr=BASE_LR,
     final_lr=BASE_LR * 1e-6,
-    warmup_epochs=5,
-    steady_epochs=795,
-    anneal_epochs=200,
+    warmup_epochs=4,
+    steady_epochs=4 * EPOCHS // 5 - 4,
+    anneal_epochs=EPOCHS // 5,
 )
-
-beta_epochs = EPOCHS // 5
 
 model.train()
 for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
-    beta: float = (0.5 * (epoch / beta_epochs)) if epoch < beta_epochs else 0.5
+    beta: float = ((epoch / BETA_EPOCHS) if epoch < BETA_EPOCHS else 1.0) * BETA_MAX
     for i, (images, attr) in tqdm(
         enumerate(train_dl), total=len(train_dl), leave=False, desc="Batch"
     ):
@@ -76,4 +78,4 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
     scheduler.step()
 
 
-save_model(model, "./celeba_cvae_v3.safetensors")
+save_model(model, "./celeba_cvae_v4.safetensors")

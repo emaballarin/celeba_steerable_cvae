@@ -11,8 +11,8 @@ def pixelwise_bce_sum(lhs: Tensor, rhs: Tensor) -> Tensor:
 
 
 @torch.jit.script
-def beta_gaussian_kldiv(mu: Tensor, sigma: Tensor, beta: float = 0.5) -> Tensor:
-    kldiv = (torch.pow(mu, 2) + torch.exp(sigma) - sigma - 1).sum()
+def beta_gaussian_kldiv(mu: Tensor, sigma: Tensor, beta: float = 1.0) -> Tensor:
+    kldiv = 0.5 * (torch.pow(mu, 2) + torch.exp(sigma) - sigma - 1).sum()
     return beta * kldiv
 
 
@@ -22,7 +22,7 @@ def beta_reco_bce(
     input_orig: Tensor,
     mu: Tensor,
     sigma: Tensor,
-    beta: float = 0.5,
+    beta: float = 1.0,
 ):
     kldiv = beta_gaussian_kldiv(mu, sigma, beta)
     pwbce = pixelwise_bce_sum(input_reco, input_orig)

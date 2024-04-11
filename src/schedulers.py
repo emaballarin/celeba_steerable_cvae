@@ -19,8 +19,8 @@ def warmed_up_linneal(
         grp["lr"] = steady_lr
 
     milestones: List[int] = [
-        max(3, warmup_epochs),
-        max(3, warmup_epochs) + max(1, steady_epochs),
+        mwue := max(3, warmup_epochs),
+        mwue + max(1, steady_epochs),
     ]
 
     # Schedulers
