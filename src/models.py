@@ -22,24 +22,29 @@ class Concatenate(nn.Module):
 
 
 class DuplexLinearNeck(nn.Module):
-    def __init__(self, in_dim: int, latent_dim: int, shared: bool = False):
+    def __init__(self, in_dim: int, latent_dim: int):
         super().__init__()
-        self.shared: bool = shared
-        if shared:
-            self.shared_layer: nn.Linear = nn.Linear(in_dim, 2 * latent_dim)
-        else:
-            self.x_to_mu: nn.Linear = nn.Linear(in_dim, latent_dim)
-            self.x_to_log_var: nn.Linear = nn.Linear(in_dim, latent_dim)
+        self.x_to_mu: nn.Linear = nn.Linear(in_dim, latent_dim)
+        self.x_to_log_var: nn.Linear = nn.Linear(in_dim, latent_dim)
 
     def forward(
         self, xc: Union[Tuple[th.Tensor, ...], List[th.Tensor]]
     ) -> Tuple[th.Tensor, th.Tensor]:
         cxc: th.Tensor = th.cat(xc, dim=1)
-
-        if self.shared:
-            # noinspection PyTypeChecker
-            return th.chunk(self.shared_layer(cxc), 2, dim=1)
         return self.x_to_mu(cxc), self.x_to_log_var(cxc)
+
+
+class SharedDuplexLinearNeck(nn.Module):
+    def __init__(self, in_dim: int, latent_dim: int):
+        super().__init__()
+        self.shared_layer: nn.Linear = nn.Linear(in_dim, 2 * latent_dim)
+
+    def forward(
+        self, xc: Union[Tuple[th.Tensor, ...], List[th.Tensor]]
+    ) -> Tuple[th.Tensor, th.Tensor]:
+        cxc: th.Tensor = th.cat(xc, dim=1)
+        # noinspection PyTypeChecker
+        return th.chunk(self.shared_layer(cxc), 2, dim=1)
 
 
 class GaussianReparameterizerSampler(nn.Module):
@@ -54,17 +59,17 @@ class GaussianReparameterizerSampler(nn.Module):
 def make_encoder_base() -> nn.Module:
     return nn.Sequential(
         # 3x64x64
-        nn.Conv2d(3, 32, 3, stride=2, padding=1),
-        nn.BatchNorm2d(32),
+        nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=False),
+        nn.BatchNorm2d(32, affine=True),
         nn.LeakyReLU(0.2),
-        nn.Conv2d(32, 64, 3, stride=2, padding=1),
-        nn.BatchNorm2d(64),
+        nn.Conv2d(32, 64, 3, stride=2, padding=1, bias=False),
+        nn.BatchNorm2d(64, affine=True),
         nn.LeakyReLU(0.2),
-        nn.Conv2d(64, 128, 3, stride=2, padding=1),
-        nn.BatchNorm2d(128),
+        nn.Conv2d(64, 128, 3, stride=2, padding=1, bias=False),
+        nn.BatchNorm2d(128, affine=True),
         nn.LeakyReLU(0.2),
-        nn.Conv2d(128, 256, 3, stride=2, padding=1),
-        nn.BatchNorm2d(256),
+        nn.Conv2d(128, 256, 3, stride=2, padding=1, bias=False),
+        nn.BatchNorm2d(256, affine=True),
         nn.LeakyReLU(0.2),
         # 256x4x4
     )
@@ -75,19 +80,27 @@ def make_decoder_base(lat_size: int = 128, cond_size: int = 40) -> nn.Module:
         nn.Linear(lat_size + cond_size, 256 * 4 * 4),
         nn.LeakyReLU(0.2),
         nn.Unflatten(1, (256, 4, 4)),
-        nn.ConvTranspose2d(256, 256, 3, stride=2, padding=1, output_padding=1),
-        nn.BatchNorm2d(256),
+        nn.ConvTranspose2d(
+            256, 256, 3, stride=2, padding=1, output_padding=1, bias=False
+        ),
+        nn.BatchNorm2d(256, affine=True),
         nn.LeakyReLU(0.2),
-        nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, output_padding=1),
-        nn.BatchNorm2d(128),
+        nn.ConvTranspose2d(
+            256, 128, 3, stride=2, padding=1, output_padding=1, bias=False
+        ),
+        nn.BatchNorm2d(128, affine=True),
         nn.LeakyReLU(0.2),
-        nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
-        nn.BatchNorm2d(64),
+        nn.ConvTranspose2d(
+            128, 64, 3, stride=2, padding=1, output_padding=1, bias=False
+        ),
+        nn.BatchNorm2d(64, affine=True),
         nn.LeakyReLU(0.2),
-        nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
-        nn.BatchNorm2d(32),
+        nn.ConvTranspose2d(
+            64, 32, 3, stride=2, padding=1, output_padding=1, bias=False
+        ),
+        nn.BatchNorm2d(32, affine=True),
         nn.LeakyReLU(0.2),
-        nn.ConvTranspose2d(32, 3, 3, stride=1, padding=1),
+        nn.ConvTranspose2d(32, 3, 3, stride=1, padding=1, bias=True),
         nn.Sigmoid(),
     )
 
@@ -103,9 +116,14 @@ class CelebACVAE(nn.Module):
         self.lat_size: int = lat_size
         self.cond_size: int = cond_size
         self.encoder: nn.Module = make_encoder_base()
-        self.neck: nn.Module = DuplexLinearNeck(
-            4096 + self.cond_size, self.lat_size, shared=shared_neck
-        )
+        if shared_neck:
+            self.neck: nn.Module = SharedDuplexLinearNeck(
+                4096 + self.cond_size, self.lat_size
+            )
+        else:
+            self.neck: nn.Module = DuplexLinearNeck(
+                4096 + self.cond_size, self.lat_size
+            )
         self.sampler: nn.Module = GaussianReparameterizerSampler()
         self.decoder: nn.Module = nn.Sequential(
             Concatenate(), make_decoder_base(self.lat_size, self.cond_size)

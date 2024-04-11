@@ -204,6 +204,8 @@ fabric.properties
 
 # Local scratchpads
 scratches/
+scratch.py
+scratch.ipynb
 
 # Datasets
 data/

@@ -21,12 +21,24 @@ IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
 TRAIN_BS: int = 512
 LATENT_SIZE: int = 128
 CONDITION_SIZE: int = 40
-EPOCHS: int = 200
+EPOCHS: int = 60
 BASE_LR: float = 1e-3
 BETA_EPOCHS: int = EPOCHS // 5
 BETA_MAX: float = 1.0
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
+
+
+dl_opt_kwargs = (
+    {
+        "pin_memory": (device == th.device("cuda")),
+        "pin_memory_device": (
+            "cuda" if (device == th.device("cuda")) else ""  # NOSONAR
+        ),
+    }
+    if TRAIN_BS >= 1024
+    else {}
+)
 
 train_ds = CelebA(
     root="../data/",
@@ -42,8 +54,7 @@ train_dl = DataLoader(
     shuffle=True,
     num_workers=16,
     persistent_workers=True,
-    pin_memory=(device == th.device("cuda")),
-    pin_memory_device="cuda" if (device == th.device("cuda")) else "",
+    **dl_opt_kwargs,
 )
 
 model = CelebACVAE(lat_size=LATENT_SIZE, cond_size=CONDITION_SIZE, shared_neck=True).to(
@@ -78,4 +89,4 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
     scheduler.step()
 
 
-save_model(model, "./celeba_cvae_v4.safetensors")
+save_model(model, "./celeba_cvae_v5.safetensors")
