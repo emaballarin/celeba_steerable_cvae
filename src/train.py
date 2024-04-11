@@ -4,7 +4,7 @@ from typing import Tuple
 
 import torch as th
 import wandb
-from losses import beta_reco_bce
+from losses import beta_reco_bce_splitout
 from models import CelebACVAE
 from optim import RAdam
 from safetensors.torch import save_model
@@ -23,9 +23,9 @@ TRAIN_BS: int = 256
 LATENT_SIZE: int = 128
 CONDITION_SIZE: int = 40
 EPOCHS: int = 60
-BASE_LR: float = 1e-3
-BETA_EPOCHS: int = EPOCHS // 5
-BETA_MAX: float = 1.0
+BASE_LR: float = 0.5e-3
+BETA_EPOCHS: int = 0
+BETA_MAX: float = 0.7
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
 
@@ -37,7 +37,7 @@ dl_opt_kwargs = (
             "cuda" if (device == th.device("cuda")) else ""  # NOSONAR
         ),
     }
-    if TRAIN_BS >= 1024
+    if TRAIN_BS > 1024
     else {}
 )
 
@@ -62,30 +62,35 @@ model = CelebACVAE(lat_size=LATENT_SIZE, cond_size=CONDITION_SIZE, shared_neck=T
     device
 )
 
-optimizer = RAdam(model.parameters(), lr=BASE_LR)
+optimizer = RAdam(model.parameters(), lr=BASE_LR, betas=(0.9, 0.985))
 
 optimizer, scheduler = warmed_up_linneal(
     optim=optimizer,
     init_lr=BASE_LR * 1e-4,
     steady_lr=BASE_LR,
-    final_lr=BASE_LR * 1e-6,
+    final_lr=BASE_LR * 1e-4,
     warmup_epochs=4,
-    steady_epochs=4 * EPOCHS // 5 - 4,
-    anneal_epochs=EPOCHS // 5,
+    steady_epochs=EPOCHS - 4 - 4,
+    anneal_epochs=4,
 )
 
 loss: th.Tensor = th.tensor(0.0, device=device)
+reco: th.Tensor = th.tensor(0.0, device=device)
+kldiv: th.Tensor = th.tensor(0.0, device=device)
 
 wandb.init(
     project="celeba_sweeping_cvae",
     config={
-        "version": "v5",
+        "version": "v7",
     },
 )
 
 model.train()
 for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
-    beta: float = ((epoch / BETA_EPOCHS) if epoch < BETA_EPOCHS else 1.0) * BETA_MAX
+    if BETA_EPOCHS > 0:
+        beta: float = ((epoch / BETA_EPOCHS) if epoch < BETA_EPOCHS else 1.0) * BETA_MAX
+    else:
+        beta = BETA_MAX
     for i, (images, attr) in tqdm(
         enumerate(train_dl), total=len(train_dl), leave=False, desc="Batch"
     ):
@@ -93,15 +98,17 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
         attr: th.Tensor = attr.to(device)
         optimizer.zero_grad()
         reconstructed_images, mean, log_var = model(images, attr)
-        loss = beta_reco_bce(reconstructed_images, images, mean, log_var, beta)
+        loss, reco, kldiv = beta_reco_bce_splitout(
+            reconstructed_images, images, mean, log_var, beta
+        )
         loss.backward()
         optimizer.step()
     scheduler.step()
     wandb.log(
-        {"loss": loss.item(), "beta": beta, "lr": optimizer.param_groups[0]["lr"]},
+        {"lossT": loss.item(), "lossR": reco.item(), "lossK": kldiv.item()},
         step=epoch,
     )
 wandb.finish()
 
 
-save_model(model, "./celeba_cvae_v6.safetensors")
+save_model(model, "./celeba_cvae_v7.safetensors")
