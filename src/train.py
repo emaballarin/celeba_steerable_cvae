@@ -19,7 +19,7 @@ from tqdm.auto import trange
 
 DEVICE_AUTODETECT: bool = True
 IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
-TRAIN_BS: int = 512
+TRAIN_BS: int = 256
 LATENT_SIZE: int = 128
 CONDITION_SIZE: int = 40
 EPOCHS: int = 60
@@ -104,4 +104,4 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
 wandb.finish()
 
 
-save_model(model, "./celeba_cvae_v5.safetensors")
+save_model(model, "./celeba_cvae_v6.safetensors")
