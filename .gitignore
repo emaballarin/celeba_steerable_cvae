@@ -203,6 +203,7 @@ fabric.properties
 .wandb/
 
 # Local scratchpads
+scratch/
 scratches/
 scratch.py
 scratch.ipynb

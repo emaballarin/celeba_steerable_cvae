@@ -5,7 +5,7 @@ from typing import Tuple
 import torch as th
 import wandb
 from losses import beta_reco_bce_splitout
-from models import CelebACVAE
+from losses import var_of_lap
 from optim import RAdam
 from safetensors.torch import save_model
 from schedulers import warmed_up_linneal
@@ -17,6 +17,8 @@ from torchvision.transforms import ToTensor
 from tqdm.auto import tqdm
 from tqdm.auto import trange
 
+from models import CelebACVAE
+
 DEVICE_AUTODETECT: bool = True
 IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
 TRAIN_BS: int = 256
@@ -27,6 +29,7 @@ BASE_LR: float = 1e-3
 BETA_LAG: int = 5
 BETA_EPOCHS: int = max(0, EPOCHS // 10 - BETA_LAG)
 BETA_MAX: float = 6.0  # Target: RL/KL ~ 10
+VOL_SCALE: float = 5000000  # Target: RL/SCVOL ~ 20
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
 
@@ -76,11 +79,12 @@ optimizer, scheduler = warmed_up_linneal(
 loss: th.Tensor = th.tensor(0.0, device=device)
 reco: th.Tensor = th.tensor(0.0, device=device)
 kldiv: th.Tensor = th.tensor(0.0, device=device)
+scvol: th.Tensor = th.tensor(0.0, device=device)
 
 wandb.init(
     project="celeba_sweeping_cvae",
     config={
-        "version": "v10",
+        "version": "v11",
     },
 )
 
@@ -111,6 +115,8 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
         loss, reco, kldiv = beta_reco_bce_splitout(
             reconstructed_images, images, mean, log_var, beta
         )
+        scvol = var_of_lap(reconstructed_images) * VOL_SCALE
+        loss = loss + scvol
         loss.backward()
         optimizer.step()
     scheduler.step()
@@ -119,6 +125,7 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
             "lossT": loss.item(),
             "lossR": reco.item(),
             "lossK": kldiv.item(),
+            "lossV": scvol.item(),
             "beta": beta,
             "lr": scheduler.get_last_lr()[0],
         },
@@ -127,4 +134,4 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
 wandb.finish()
 
 
-save_model(model, "./celeba_cvae_v10.safetensors")
+save_model(model, "./celeba_cvae_v11.safetensors")
