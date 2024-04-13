@@ -131,7 +131,8 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
             reconstructed_images, images, mean, log_var, beta
         )
         scvol = (
-            th.abs(var_of_lap(reconstructed_images) - VOL_TARGET_MEAN).sum() * vol_scale
+            th.pow(th.abs(var_of_lap(reconstructed_images) - VOL_TARGET_MEAN), 2).sum()
+            * vol_scale
         )
         loss = loss + scvol
         loss.backward()
