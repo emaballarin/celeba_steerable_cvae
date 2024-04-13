@@ -29,7 +29,10 @@ BASE_LR: float = 1e-3
 BETA_LAG: int = 5
 BETA_EPOCHS: int = max(0, EPOCHS // 10 - BETA_LAG)
 BETA_MAX: float = 6.0  # Target: RL/KL ~ 10
-VOL_SCALE: float = 5000000 / TRAIN_BS  # Target: RL/SCVOL ~ 20
+VOL_SCALE_LAG: int = 2
+VOL_TARGET_MEAN: float = 0.05
+VOL_SCALE_EPOCHS: int = max(0, EPOCHS // 10 - BETA_LAG) + abs(VOL_SCALE_LAG - BETA_LAG)
+VOL_SCALE_MAX: float = 5000000 / TRAIN_BS  # Target: RL/SCVOL ~ 20
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
 
@@ -102,6 +105,18 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
         else:
             beta = BETA_MAX
 
+    if epoch < VOL_SCALE_LAG:
+        vol_scale: float = 0.0
+    else:
+        if VOL_SCALE_EPOCHS > 0:
+            vol_scale: float = (
+                ((epoch - VOL_SCALE_LAG) / VOL_SCALE_EPOCHS)
+                if (epoch - VOL_SCALE_LAG) < VOL_SCALE_EPOCHS
+                else 1.0
+            ) * VOL_SCALE_MAX
+        else:
+            vol_scale = VOL_SCALE_MAX
+
     for i, (images, attr) in tqdm(
         enumerate(train_dl), total=len(train_dl), leave=False, desc="Batch"
     ):
@@ -115,7 +130,9 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
         loss, reco, kldiv = beta_reco_bce_splitout(
             reconstructed_images, images, mean, log_var, beta
         )
-        scvol = var_of_lap(reconstructed_images).sum() * VOL_SCALE
+        scvol = (
+            th.abs(var_of_lap(reconstructed_images) - VOL_TARGET_MEAN).sum() * vol_scale
+        )
         loss = loss + scvol
         loss.backward()
         optimizer.step()
