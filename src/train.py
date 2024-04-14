@@ -23,16 +23,17 @@ DEVICE_AUTODETECT: bool = True
 IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
 TRAIN_BS: int = 256
 LATENT_SIZE: int = 128
-CONDITION_SIZE: int = 14
-EPOCHS: int = 200
+CONDITION_SIZE: int = 15
+EPOCHS: int = 400
 BASE_LR: float = 1e-3
 BETA_LAG: int = 5
 BETA_EPOCHS: int = max(0, EPOCHS // 10 - BETA_LAG)
-BETA_MAX: float = 6.0  # Target: RL/KL ~ 10
+BETA_MAX: float = 6.0
 VOL_SCALE_LAG: int = 2
 VOL_TARGET_MEAN: float = 0.05
 VOL_SCALE_EPOCHS: int = max(0, EPOCHS // 10 - BETA_LAG) + abs(VOL_SCALE_LAG - BETA_LAG)
-VOL_SCALE_MAX: float = 5000000 / TRAIN_BS  # Target: RL/SCVOL ~ 20
+VOL_SCALE_MAX: float = 5000000 / TRAIN_BS
+HYPERSET_VERSION: str = "v12"
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
 
@@ -87,7 +88,7 @@ scvol: th.Tensor = th.tensor(0.0, device=device)
 wandb.init(
     project="celeba_sweeping_cvae",
     config={
-        "version": "v11",
+        "version": HYPERSET_VERSION,
     },
 )
 
@@ -122,7 +123,7 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
     ):
         images: th.Tensor = images.to(device)
         attr: th.Tensor = th.index_select(
-            attr, 1, th.tensor([0, 4, 5, 8, 9, 10, 15, 18, 20, 24, 25, 28, 31, 39])
+            attr, 1, th.tensor([0, 4, 5, 8, 9, 10, 13, 15, 18, 20, 24, 25, 28, 31, 39])
         )
         attr: th.Tensor = attr.to(device)
         optimizer.zero_grad()
@@ -152,4 +153,4 @@ for epoch in trange(EPOCHS, leave=True, desc="Epoch"):
 wandb.finish()
 
 
-save_model(model, "./celeba_cvae_v11.safetensors")
+save_model(model, f"./celeba_cvae_{HYPERSET_VERSION}.safetensors")
