@@ -59,18 +59,18 @@ class GaussianReparameterizerSampler(nn.Module):
 def make_encoder_base() -> nn.Module:
     return nn.Sequential(
         # 3x64x64
-        nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(32, affine=True),
+        nn.Conv2d(3, 32, 3, stride=2, padding=1),
         nn.LeakyReLU(0.2),
-        nn.Conv2d(32, 64, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(64, affine=True),
+        nn.BatchNorm2d(32),
+        nn.Conv2d(32, 64, 3, stride=2, padding=1),
         nn.LeakyReLU(0.2),
-        nn.Conv2d(64, 128, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(128, affine=True),
+        nn.BatchNorm2d(64),
+        nn.Conv2d(64, 128, 3, stride=2, padding=1),
         nn.LeakyReLU(0.2),
-        nn.Conv2d(128, 256, 3, stride=2, padding=1, bias=False),
-        nn.BatchNorm2d(256, affine=True),
+        nn.BatchNorm2d(128),
+        nn.Conv2d(128, 256, 3, stride=2, padding=1),
         nn.LeakyReLU(0.2),
+        nn.BatchNorm2d(256),
         # 256x4x4
     )
 
@@ -80,27 +80,19 @@ def make_decoder_base(lat_size: int = 128, cond_size: int = 40) -> nn.Module:
         nn.Linear(lat_size + cond_size, 256 * 4 * 4),
         nn.LeakyReLU(0.2),
         nn.Unflatten(1, (256, 4, 4)),
-        nn.ConvTranspose2d(
-            256, 256, 3, stride=2, padding=1, output_padding=1, bias=False
-        ),
-        nn.BatchNorm2d(256, affine=True),
+        nn.ConvTranspose2d(256, 256, 3, stride=2, padding=1, output_padding=1),
         nn.LeakyReLU(0.2),
-        nn.ConvTranspose2d(
-            256, 128, 3, stride=2, padding=1, output_padding=1, bias=False
-        ),
-        nn.BatchNorm2d(128, affine=True),
+        nn.BatchNorm2d(256),
+        nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, output_padding=1),
         nn.LeakyReLU(0.2),
-        nn.ConvTranspose2d(
-            128, 64, 3, stride=2, padding=1, output_padding=1, bias=False
-        ),
-        nn.BatchNorm2d(64, affine=True),
+        nn.BatchNorm2d(128),
+        nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
         nn.LeakyReLU(0.2),
-        nn.ConvTranspose2d(
-            64, 32, 3, stride=2, padding=1, output_padding=1, bias=False
-        ),
-        nn.BatchNorm2d(32, affine=True),
+        nn.BatchNorm2d(64),
+        nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
         nn.LeakyReLU(0.2),
-        nn.ConvTranspose2d(32, 3, 3, stride=1, padding=1, bias=True),
+        nn.BatchNorm2d(32),
+        nn.ConvTranspose2d(32, 3, 3, stride=1, padding=1),
         nn.Sigmoid(),
     )
 

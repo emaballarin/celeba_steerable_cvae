@@ -1,7 +1,7 @@
 .PHONY: clean
 clean:
-	find . -type f -name '*.py[co]' -delete -o -type d -name __pycache__ -delete -o -type d -name .mypy_cache -delete
 	rm -R -f .mypy_cache
+	find . -type f -name '*.py[co]' -delete -o -type d -name __pycache__ -delete -o -type d -name .mypy_cache -delete
 
 .PHONY: format
 format:

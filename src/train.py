@@ -6,6 +6,7 @@ import torch as th
 import wandb
 from losses import beta_reco_bce_splitout
 from losses import var_of_lap
+from models import CelebACVAE
 from optim import RAdam
 from safetensors.torch import save_model
 from schedulers import warmed_up_linneal
@@ -16,8 +17,6 @@ from torchvision.transforms import Resize
 from torchvision.transforms import ToTensor
 from tqdm.auto import tqdm
 from tqdm.auto import trange
-
-from models import CelebACVAE
 
 DEVICE_AUTODETECT: bool = True
 IMG_SHAPE: Tuple[int, int, int] = (3, 64, 64)
@@ -33,7 +32,7 @@ VOL_SCALE_LAG: int = 2
 VOL_TARGET_MEAN: float = 0.05
 VOL_SCALE_EPOCHS: int = max(0, EPOCHS // 10 - BETA_LAG) + abs(VOL_SCALE_LAG - BETA_LAG)
 VOL_SCALE_MAX: float = 5000000 / TRAIN_BS
-HYPERSET_VERSION: str = "v12"
+HYPERSET_VERSION: str = "v13"
 
 device = th.device("cuda" if (th.cuda.is_available() and DEVICE_AUTODETECT) else "cpu")
 
