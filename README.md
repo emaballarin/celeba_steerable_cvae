@@ -1,1 +1,1 @@
-# `celeba_sweeping_cvae`
+# `celeba_steerable_cvae`
