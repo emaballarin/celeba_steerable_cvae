@@ -1,5 +1,5 @@
 safetensors>=0.7.0
 torch>=2.2.2
 torchvision>=0.26.0
-tqdm>=4.66.2
+tqdm>=4.67.3
 wandb>=0.26.0
